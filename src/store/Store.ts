@@ -12,7 +12,7 @@ class GlobalStore {
 
   private constructor() {
     const appDir = path.resolve(process.cwd(), "src/App.ts");
-    const mod = require(appDir);
+    const mod = require(appDir).default;
     const App = mod.default ?? mod.App;
     this.root = createRoot(App);
   }

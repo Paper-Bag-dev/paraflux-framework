@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import 'ts-node/register';
 import { createDevServer } from "./devServer/createDevServer";
 import globalStore from "./store/Store";
 import debounce from "./utils/debouncer";
