@@ -1,1 +1,1 @@
-{"root":["./src/app.ts","./src/index.ts","./src/nom/livenom/index.ts","./src/devserver/createdevserver.ts","./src/store/store.ts","./src/store/nodestore/index.ts","./src/store/viewsstore/index.ts","./src/utils/debouncer.ts","./src/watcher/watcher.ts"],"version":"5.6.3"}
+{"root":["./src/index.ts","./src/nom/livenom/index.ts","./src/devserver/createdevserver.ts","./src/store/store.ts","./src/store/nodestore/index.ts","./src/store/viewsstore/index.ts","./src/utils/debouncer.ts","./src/watcher/watcher.ts"],"version":"5.6.3"}

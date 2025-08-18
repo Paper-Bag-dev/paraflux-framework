@@ -36,7 +36,7 @@ class GlobalStore {
     viewStore = new viewsStore_1.ViewStore();
     nodesStore = new nodeStore_1.NodeStore();
     constructor() {
-        const appDir = path_1.default.resolve(process.cwd(), "src/App");
+        const appDir = path_1.default.resolve(process.cwd(), "src/App.ts");
         const mod = require(appDir);
         const App = mod.default ?? mod.App;
         this.root = (0, createRoot_1.createRoot)(App);
