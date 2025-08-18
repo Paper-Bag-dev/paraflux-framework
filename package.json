@@ -1,6 +1,6 @@
 {
   "name": "@paraflux/framework",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
   "module": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev" : "ts-node src/index.ts"
+    "dev": "ts-node src/index.ts"
   },
   "keywords": [],
   "author": "",
