@@ -32,6 +32,6 @@
     "@paraflux/core": "^1.0.1"
   },
   "bin": {
-    "paraflux-run-dev": "dist/index.js"
+    "paraflux-run-dev": "ts-node dist/index.js"
   }
 }
