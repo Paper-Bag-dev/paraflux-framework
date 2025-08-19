@@ -6,21 +6,23 @@ import { ViewStore } from "./viewsStore";
 
 class GlobalStore {
   private static instance: GlobalStore | null = null;
-  root: SuperNode | Node;
+  root: SuperNode | Node | null = null;
   public viewStore: ViewStore = new ViewStore();
   public nodesStore: NodeStore = new NodeStore();
 
   private constructor() {
-    this.root = this.loadApp();
   }
 
-  private loadApp() {
-    const appDir = path.resolve(process.cwd(), ".paraflux/cache/App.js");
-    delete require.cache[require.resolve(appDir)];
-    const mod = require(appDir);
-    const App = mod.default ?? mod.App;
-    return createRoot(App);
-  }
+private async loadApp() {
+  const appDir = path.resolve(process.cwd(), ".paraflux/cache/App.js");
+  delete require.cache[require.resolve(appDir)];
+
+  // TypeScript doesn't know types, so cast to any
+  const mod: any = await import(appDir); 
+  const App = mod.default ?? mod.App;
+  return createRoot(App);
+}
+
 
   public static getInstance(): GlobalStore {
     if (!GlobalStore.instance) {
@@ -29,8 +31,8 @@ class GlobalStore {
     return GlobalStore.instance;
   }
 
-  public updateRoot() {
-    this.root = this.loadApp();
+  public async updateRoot() {
+    this.root = await this.loadApp();
   }
 }
 
