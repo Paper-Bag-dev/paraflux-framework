@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import esbuild from "esbuild";
 import { createDevServer } from "./devServer/createDevServer";
-import globalStore from "./store/Store";
 import debounce from "./utils/debouncer";
 import { createWatcher } from "./watcher/Watcher";
 import path from "node:path";
@@ -26,8 +25,10 @@ async function buildApp() {
 async function main() {
   await buildApp();
   const { wss } = createDevServer(5000);
+  const  globalStore = (await import("./store/Store")).default;
+  
   const debouncedUpdate = debounce(async (event, file) => {
-    await globalStore.updateRoot();
+    globalStore.updateRoot();
 
     console.log("Rebuilt Root!");
 
