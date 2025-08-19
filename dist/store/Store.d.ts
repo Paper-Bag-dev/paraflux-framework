@@ -7,9 +7,9 @@ declare class GlobalStore {
     viewStore: ViewStore;
     nodesStore: NodeStore;
     private constructor();
+    private loadApp;
     static getInstance(): GlobalStore;
-    getRoot(): SuperNode | Node;
-    updateRoot(): Promise<void>;
+    updateRoot(): void;
 }
 declare const globalStore: GlobalStore;
 export default globalStore;
