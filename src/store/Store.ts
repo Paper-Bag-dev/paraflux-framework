@@ -1,8 +1,8 @@
+import path from "path";
 import { Node, SuperNode } from "@paraflux/core";
 import { createRoot } from "@paraflux/core/dist/functions/createRoot";
 import { NodeStore } from "./nodeStore";
 import { ViewStore } from "./viewsStore";
-import path from "path";
 
 class GlobalStore {
   private static instance: GlobalStore | null = null;
@@ -11,10 +11,15 @@ class GlobalStore {
   public nodesStore: NodeStore = new NodeStore();
 
   private constructor() {
-    const appDir = path.resolve(process.cwd(), "src/App.ts");
-    const mod = require(appDir).default;
+    this.root = this.loadApp();
+  }
+
+  private loadApp() {
+    const appDir = path.resolve(process.cwd(), ".paraflux/cache/App.js");
+    delete require.cache[require.resolve(appDir)];
+    const mod = require(appDir);
     const App = mod.default ?? mod.App;
-    this.root = createRoot(App);
+    return createRoot(App);
   }
 
   public static getInstance(): GlobalStore {
@@ -24,17 +29,10 @@ class GlobalStore {
     return GlobalStore.instance;
   }
 
-  public getRoot(): SuperNode | Node {
-    return this.root;
-  }
-
-  public async updateRoot() {
-    const mod = await import("./App?" + Date.now());
-    const App = mod.default ?? mod.App;
-    this.root = createRoot(App);
+  public updateRoot() {
+    this.root = this.loadApp();
   }
 }
 
 const globalStore = GlobalStore.getInstance();
-
 export default globalStore;
