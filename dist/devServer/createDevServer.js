@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createDevServer = createDevServer;
+exports.broadcast = broadcast;
 const connect_1 = __importDefault(require("connect"));
 const http_1 = __importDefault(require("http"));
 const ws_1 = require("ws");
@@ -18,8 +19,15 @@ function createDevServer(port) {
         console.log("⚡ Client Connected!");
         ws.send(JSON.stringify({ type: "connected" }));
     });
-    server.listen(5000, () => {
+    server.listen(port, () => {
         console.log("🚀 Dev server running at http://localhost:5000");
     });
     return { server, wss };
+}
+function broadcast(wss, msg) {
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(JSON.stringify(msg));
+        }
+    });
 }

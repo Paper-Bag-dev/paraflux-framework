@@ -17,9 +17,17 @@ export function createDevServer(port: number) {
     ws.send(JSON.stringify({ type: "connected" }));
   });
 
-  server.listen(5000, () => {
+  server.listen(port, () => {
     console.log("🚀 Dev server running at http://localhost:5000");
   });
 
   return {server, wss};
+}
+
+export function broadcast(wss: WebSocketServer, msg: object) {
+  wss.clients.forEach(client => {
+    if (client.readyState === 1) {
+      client.send(JSON.stringify(msg));
+    }
+  });
 }

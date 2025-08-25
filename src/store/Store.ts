@@ -18,7 +18,7 @@ private async loadApp() {
   delete require.cache[require.resolve(appDir)];
 
   // TypeScript doesn't know types, so cast to any
-  const mod: any = await import(appDir); 
+  const mod: any = await import(appDir);
   const App = mod.default ?? mod.App;
   return createRoot(App);
 }
