@@ -26,6 +26,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.globalStore = void 0;
 const path_1 = __importDefault(require("path"));
 const createRoot_1 = require("@paraflux/core/dist/functions/createRoot");
 const nodeStore_1 = require("./nodeStore");
@@ -36,15 +37,15 @@ class GlobalStore {
     root = null;
     viewStore = new viewsStore_1.ViewStore();
     nodesStore = new nodeStore_1.NodeStore();
-    constructor() {
+    constructor() { }
+    getAppPath() {
+        const appDir = path_1.default.resolve(process.cwd(), ".paraflux/cache/App.js");
+        return `${appDir}?t=${Date.now()}`;
     }
     async loadApp() {
-        const appDir = path_1.default.resolve(process.cwd(), ".paraflux/cache/App.js");
-        delete require.cache[require.resolve(appDir)];
-        // TypeScript doesn't know types, so cast to any
-        const mod = await Promise.resolve(`${appDir}`).then(s => __importStar(require(s)));
-        const App = mod.default ?? mod.App;
-        this.root = (0, createRoot_1.createRoot)(App);
+        const mod = await Promise.resolve(`${this.getAppPath()}`).then(s => __importStar(require(s)));
+        const AppClass = mod.default ?? mod.App;
+        this.root = (0, createRoot_1.createRoot)(AppClass);
         this.root.render();
         return this.root;
     }
@@ -55,9 +56,11 @@ class GlobalStore {
         return GlobalStore.instance;
     }
     async updateRoot() {
-        this.root = await this.loadApp();
-        await (0, core_1.execTreeNaive)(this.root);
+        await this.loadApp();
+        if (this.root) {
+            await (0, core_1.execTreeNaive)(this.root);
+        }
     }
 }
-const globalStore = GlobalStore.getInstance();
-exports.default = globalStore;
+exports.globalStore = GlobalStore.getInstance();
+exports.default = exports.globalStore;
