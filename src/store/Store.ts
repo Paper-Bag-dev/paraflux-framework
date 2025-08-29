@@ -3,7 +3,7 @@ import { Node, SuperNode } from "@paraflux/core";
 import { createRoot } from "@paraflux/core/dist/functions/createRoot";
 import { NodeStore } from "./nodeStore";
 import { ViewStore } from "./viewsStore";
-
+import { execTreeNaive } from "@paraflux/core";
 class GlobalStore {
   private static instance: GlobalStore | null = null;
   root: SuperNode | Node | null = null;
@@ -33,6 +33,7 @@ private async loadApp() {
 
   public async updateRoot() {
     this.root = await this.loadApp();
+    await execTreeNaive(this.root);
   }
 }
 

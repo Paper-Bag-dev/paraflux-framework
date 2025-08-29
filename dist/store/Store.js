@@ -30,6 +30,7 @@ const path_1 = __importDefault(require("path"));
 const createRoot_1 = require("@paraflux/core/dist/functions/createRoot");
 const nodeStore_1 = require("./nodeStore");
 const viewsStore_1 = require("./viewsStore");
+const core_1 = require("@paraflux/core");
 class GlobalStore {
     static instance = null;
     root = null;
@@ -53,6 +54,7 @@ class GlobalStore {
     }
     async updateRoot() {
         this.root = await this.loadApp();
+        await (0, core_1.execTreeNaive)(this.root);
     }
 }
 const globalStore = GlobalStore.getInstance();
