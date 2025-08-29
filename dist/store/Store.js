@@ -44,7 +44,9 @@ class GlobalStore {
         // TypeScript doesn't know types, so cast to any
         const mod = await Promise.resolve(`${appDir}`).then(s => __importStar(require(s)));
         const App = mod.default ?? mod.App;
-        return (0, createRoot_1.createRoot)(App);
+        this.root = (0, createRoot_1.createRoot)(App);
+        this.root.render();
+        return this.root;
     }
     static getInstance() {
         if (!GlobalStore.instance) {

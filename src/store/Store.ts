@@ -20,7 +20,9 @@ private async loadApp() {
   // TypeScript doesn't know types, so cast to any
   const mod: any = await import(appDir);
   const App = mod.default ?? mod.App;
-  return createRoot(App);
+  this.root = createRoot(App);
+  this.root.render();
+  return this.root;
 }
 
 
