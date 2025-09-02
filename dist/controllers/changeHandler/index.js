@@ -10,7 +10,7 @@ const changeHandler = (0, debouncer_1.default)(async (event, file, globalStore, 
     try {
         console.log("● Compiling code (changes)");
         await (0, esbuild_1.default)(file);
-        globalStore.updateRoot();
+        globalStore.updateRoot(file);
         console.log("✔ Compiled code (changes)");
         (0, createDevServer_1.broadcast)(wss, { type: "nom-updated", event, file });
     }

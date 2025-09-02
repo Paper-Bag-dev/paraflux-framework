@@ -13,7 +13,7 @@ declare class GlobalStore {
     private clearModuleCache;
     private loadApp;
     static getInstance(): GlobalStore;
-    updateRoot(buildPath: string): Promise<void>;
+    updateRoot(buildPath?: string): Promise<void>;
 }
 declare const globalStore: GlobalStore;
 export default globalStore;

@@ -6,7 +6,7 @@ const changeHandler = debounce(async (event, file, globalStore, wss) => {
     try {
       console.log("● Compiling code (changes)");
       await buildApp(file);
-      globalStore.updateRoot();
+      globalStore.updateRoot(file);
       console.log("✔ Compiled code (changes)");
       broadcast(wss, { type: "nom-updated", event, file });
     } catch (err) {
