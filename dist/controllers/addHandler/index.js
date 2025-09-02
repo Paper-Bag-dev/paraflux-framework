@@ -10,7 +10,7 @@ const addHandler = (0, debouncer_1.default)(async (event, file, globalStore, wss
     try {
         console.log("● Compiling Code (build)");
         await (0, esbuild_1.default)(file);
-        globalStore.updateRoot();
+        globalStore.updateRoot(file);
         console.log("✔ Compiled Code (build)");
         (0, createDevServer_1.broadcast)(wss, { type: "nom-updated", event, file });
     }

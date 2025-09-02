@@ -4,27 +4,50 @@ import { createRoot } from "@paraflux/core/dist/functions/createRoot";
 import { NodeStore } from "./nodeStore";
 import { ViewStore } from "./viewsStore";
 import { execTreeNaive } from "@paraflux/core";
+import convertPathForCacheFn from "../utils/convertPathForCacheFn";
+import LiveNOM from "../NOM/LiveNom";
 
 class GlobalStore {
   private static instance: GlobalStore | null = null;
-
-  public root: SuperNode | Node | null = null;
+  root: SuperNode | Node | null = null;
+  private App: any;
   public viewStore: ViewStore = new ViewStore();
   public nodesStore: NodeStore = new NodeStore();
+  public liveNom: LiveNOM = new LiveNOM();
 
   private constructor() {}
 
-  private getAppPath() {
-    const appDir = path.resolve(process.cwd(), ".paraflux/cache/App.js");
-    return `${appDir}?t=${Date.now()}`;
+  // Recursive cache clearing
+  private clearModuleCache(modulePath: string) {
+    const resolvedPath = require.resolve(modulePath);
+    const mod = require.cache[resolvedPath];
+    if (!mod) return;
+
+    // Recursively clear children
+    if (mod.children) {
+      mod.children.forEach((child) => this.clearModuleCache(child.id));
+    }
+
+    delete require.cache[resolvedPath];
   }
 
-  private async loadApp() {
-    const mod: any = await import(this.getAppPath());
-    const AppClass = mod.default ?? mod.App;
+  private async loadApp(dir = ".paraflux/cache/App.js") {
+    const moduleDir = path.resolve(process.cwd(), dir);
 
-    this.root = createRoot(AppClass);
+    // Clear the cache recursively
+    this.clearModuleCache(moduleDir);
+
+    // Import fresh module
+    const mod: any = await import(moduleDir);
+    this.App = mod.default ?? mod.App;
+
+    // Create and render root
+    this.root = createRoot(this.App);
     this.root.render();
+
+    // Execute tree
+    if (this.root) await execTreeNaive(this.root);
+
     return this.root;
   }
 
@@ -35,13 +58,11 @@ class GlobalStore {
     return GlobalStore.instance;
   }
 
-  public async updateRoot() {
-    await this.loadApp();
-    if (this.root) {
-      await execTreeNaive(this.root);
-    }
+  public async updateRoot(buildPath: string) {
+    const outPath = convertPathForCacheFn(buildPath);
+    await this.loadApp(outPath);
   }
 }
 
-export const globalStore = GlobalStore.getInstance();
+const globalStore = GlobalStore.getInstance();
 export default globalStore;

@@ -26,27 +26,46 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.globalStore = void 0;
 const path_1 = __importDefault(require("path"));
 const createRoot_1 = require("@paraflux/core/dist/functions/createRoot");
 const nodeStore_1 = require("./nodeStore");
 const viewsStore_1 = require("./viewsStore");
 const core_1 = require("@paraflux/core");
+const convertPathForCacheFn_1 = __importDefault(require("../utils/convertPathForCacheFn"));
+const LiveNom_1 = __importDefault(require("../NOM/LiveNom"));
 class GlobalStore {
     static instance = null;
     root = null;
+    App;
     viewStore = new viewsStore_1.ViewStore();
     nodesStore = new nodeStore_1.NodeStore();
+    liveNom = new LiveNom_1.default();
     constructor() { }
-    getAppPath() {
-        const appDir = path_1.default.resolve(process.cwd(), ".paraflux/cache/App.js");
-        return `${appDir}?t=${Date.now()}`;
+    // Recursive cache clearing
+    clearModuleCache(modulePath) {
+        const resolvedPath = require.resolve(modulePath);
+        const mod = require.cache[resolvedPath];
+        if (!mod)
+            return;
+        // Recursively clear children
+        if (mod.children) {
+            mod.children.forEach((child) => this.clearModuleCache(child.id));
+        }
+        delete require.cache[resolvedPath];
     }
-    async loadApp() {
-        const mod = await Promise.resolve(`${this.getAppPath()}`).then(s => __importStar(require(s)));
-        const AppClass = mod.default ?? mod.App;
-        this.root = (0, createRoot_1.createRoot)(AppClass);
+    async loadApp(dir = ".paraflux/cache/App.js") {
+        const moduleDir = path_1.default.resolve(process.cwd(), dir);
+        // Clear the cache recursively
+        this.clearModuleCache(moduleDir);
+        // Import fresh module
+        const mod = await Promise.resolve(`${moduleDir}`).then(s => __importStar(require(s)));
+        this.App = mod.default ?? mod.App;
+        // Create and render root
+        this.root = (0, createRoot_1.createRoot)(this.App);
         this.root.render();
+        // Execute tree
+        if (this.root)
+            await (0, core_1.execTreeNaive)(this.root);
         return this.root;
     }
     static getInstance() {
@@ -55,12 +74,10 @@ class GlobalStore {
         }
         return GlobalStore.instance;
     }
-    async updateRoot() {
-        await this.loadApp();
-        if (this.root) {
-            await (0, core_1.execTreeNaive)(this.root);
-        }
+    async updateRoot(buildPath) {
+        const outPath = (0, convertPathForCacheFn_1.default)(buildPath);
+        await this.loadApp(outPath);
     }
 }
-exports.globalStore = GlobalStore.getInstance();
-exports.default = exports.globalStore;
+const globalStore = GlobalStore.getInstance();
+exports.default = globalStore;

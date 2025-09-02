@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import path from "path";
 import fs from "fs";
+import convertPathForCacheFn from "../utils/convertPathForCacheFn";
 
 async function buildApp(buildPath: string) {
   try {
@@ -8,13 +9,7 @@ async function buildApp(buildPath: string) {
 
     const absPath = path.resolve(process.cwd(), buildPath);
 
-    const relativePath = path.relative(
-      path.resolve(process.cwd(), "src"),
-      absPath
-    );
-
-    const outPath = relativePath.replace(path.extname(relativePath), ".js");
-    const outFile = path.resolve(process.cwd(), `.paraflux/cache/${outPath}`);
+    const outFile = convertPathForCacheFn(buildPath);
 
     // Ensure cache dir exists
     fs.mkdirSync(path.dirname(outFile), { recursive: true });
