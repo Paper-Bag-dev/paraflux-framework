@@ -74,7 +74,7 @@ class GlobalStore {
         }
         return GlobalStore.instance;
     }
-    async updateRoot(buildPath = ".paraflux/cache/App.js") {
+    async updateRoot(buildPath = "/cache/App.js") {
         const outPath = (0, convertPathForCacheFn_1.default)(buildPath);
         await this.loadApp(outPath);
     }
