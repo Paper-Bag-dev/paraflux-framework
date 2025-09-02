@@ -43,24 +43,23 @@ class GlobalStore {
     constructor() { }
     // Recursive cache clearing
     clearModuleCache(modulePath) {
-        const resolvedPath = require.resolve(modulePath);
-        const mod = require.cache[resolvedPath];
-        if (!mod)
-            return;
-        if (resolvedPath.includes("node_modules"))
-            return;
         try {
+            const resolvedPath = require.resolve(modulePath);
+            const mod = require.cache[resolvedPath];
+            if (!mod)
+                return;
+            if (resolvedPath.includes("node_modules"))
+                return;
             delete require.cache[resolvedPath];
+            for (const m of Object.values(require.cache)) {
+                if (!m)
+                    continue;
+                if (m.children.some((c) => c.id === resolvedPath)) {
+                    this.clearModuleCache(m.id);
+                }
+            }
         }
         catch (error) {
-            return;
-        }
-        for (const m of Object.values(require.cache)) {
-            if (!m)
-                continue;
-            if (m.children.some((c) => c.id === resolvedPath)) {
-                this.clearModuleCache(m.id);
-            }
         }
     }
     async loadAppRoot() {
@@ -75,7 +74,6 @@ class GlobalStore {
             if (this.root === null)
                 throw new Error("Root is Null");
             const outPath = (0, convertPathForCacheFn_1.default)(buildPath);
-            console.log("Updating Root, ", outPath);
             const appRootPath = path_1.default.resolve(process.cwd(), ".paraflux/cache/App.js");
             this.clearModuleCache(outPath);
             const mod = await Promise.resolve(`${appRootPath}`).then(s => __importStar(require(s)));
