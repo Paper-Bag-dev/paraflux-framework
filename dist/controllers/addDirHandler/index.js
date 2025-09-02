@@ -12,7 +12,7 @@ const addDirHandler = (0, debouncer_1.default)(async (event, file, globalStore, 
         console.log("● Compiling Code (addDir)");
         const cacheDir = path_1.default.resolve(process.cwd(), ".paraflux/cache", path_1.default.relative("src", file));
         await promises_1.default.mkdir(cacheDir, { recursive: true });
-        globalStore.updateRoot();
+        // globalStore.updateRoot();
         console.log("✔ Compiled Code (addDir)");
         (0, createDevServer_1.broadcast)(wss, { type: "nom-updated", event, file });
     }

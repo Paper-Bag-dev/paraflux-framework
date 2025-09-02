@@ -11,9 +11,9 @@ declare class GlobalStore {
     liveNom: LiveNOM;
     private constructor();
     private clearModuleCache;
-    private loadApp;
-    static getInstance(): GlobalStore;
+    loadAppRoot(): Promise<void>;
     updateRoot(buildPath?: string): Promise<void>;
+    static getInstance(): GlobalStore;
 }
 declare const globalStore: GlobalStore;
 export default globalStore;

@@ -13,7 +13,6 @@ const unlinkDirHandler = debounce(async (event, file, globalStore, wss) => {
     );
     
     await fs.rm(cacheDir, { recursive: true, force: true });
-    globalStore.updateRoot();
     console.log("✔ Compiled Code (unlinkDir)");
     broadcast(wss, { type: "nom-updated", event, file });
   } catch (err) {

@@ -22,33 +22,49 @@ class GlobalStore {
     const resolvedPath = require.resolve(modulePath);
     const mod = require.cache[resolvedPath];
     if (!mod) return;
-
-    // Recursively clear children
-    if (mod.children) {
-      mod.children.forEach((child) => this.clearModuleCache(child.id));
+    
+    if (resolvedPath.includes("node_modules")) return;
+    
+    try {
+      delete require.cache[resolvedPath];
+    } catch (error) {
+      return;
     }
 
-    delete require.cache[resolvedPath];
+      for (const m of Object.values(require.cache)) {
+        if (!m) continue;
+        if (m.children.some((c) => c.id === resolvedPath)) {
+          this.clearModuleCache(m.id);
+        }
+      }
   }
 
-  private async loadApp(dir = ".paraflux/cache/App.js") {
-    const moduleDir = path.resolve(process.cwd(), dir);
-
-    // Clear the cache recursively
-    this.clearModuleCache(moduleDir);
-
-    // Import fresh module
-    const mod: any = await import(moduleDir);
+  public async loadAppRoot() {
+    const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/App.js");
+    const mod: any = await import(appRootPath);
     this.App = mod.default ?? mod.App;
-
-    // Create and render root
     this.root = createRoot(this.App);
     this.root.render();
+  }
 
-    // Execute tree
-    if (this.root) await execTreeNaive(this.root);
+  public async updateRoot(buildPath: string = ".paraflux/cache/App.js") {
+    try {
+      if (this.root === null) throw new Error("Root is Null");
+      const outPath = convertPathForCacheFn(buildPath);
+      
+      console.log("Updating Root, ", outPath);
+      const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/App.js");
+      this.clearModuleCache(outPath);
 
-    return this.root;
+      const mod: any = await import(appRootPath);
+      this.App = mod.default ?? mod.App;
+      this.root.render();
+
+      // Execute full tree code naively
+      if (this.root) await execTreeNaive(this.root);
+    } catch (error) {
+      console.log("Error Updating App: ", error);
+    }
   }
 
   public static getInstance(): GlobalStore {
@@ -56,11 +72,6 @@ class GlobalStore {
       GlobalStore.instance = new GlobalStore();
     }
     return GlobalStore.instance;
-  }
-
-  public async updateRoot(buildPath: string = "/cache/App.js") {
-    const outPath = convertPathForCacheFn(buildPath);
-    await this.loadApp(outPath);
   }
 }
 

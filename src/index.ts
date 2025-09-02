@@ -9,6 +9,7 @@ async function main() {
     const { wss } = createDevServer(5000);
     const globalStore = (await import("./store/Store")).default;
     await createWatcher(wss, globalStore);
+    globalStore.loadAppRoot();
   } catch (error) {
     console.log(error);
   }

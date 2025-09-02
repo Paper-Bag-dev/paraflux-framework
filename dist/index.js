@@ -37,6 +37,7 @@ async function main() {
         const { wss } = (0, createDevServer_1.createDevServer)(5000);
         const globalStore = (await Promise.resolve().then(() => __importStar(require("./store/Store")))).default;
         await (0, createWatcher_1.createWatcher)(wss, globalStore);
+        globalStore.loadAppRoot();
     }
     catch (error) {
         console.log(error);

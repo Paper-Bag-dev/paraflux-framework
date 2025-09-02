@@ -15,7 +15,7 @@ const addDirHandler = debounce(async (event, file, globalStore, wss) => {
 
     await fs.mkdir(cacheDir, { recursive: true });
 
-    globalStore.updateRoot();
+    // globalStore.updateRoot();
     console.log("✔ Compiled Code (addDir)");
     broadcast(wss, { type: "nom-updated", event, file });
   } catch (err) {

@@ -12,7 +12,6 @@ const unlinkDirHandler = (0, debouncer_1.default)(async (event, file, globalStor
         console.log("● Compiling Code (unlinkDir)");
         const cacheDir = path_1.default.resolve(process.cwd(), ".paraflux/cache", path_1.default.relative("src", file));
         await promises_1.default.rm(cacheDir, { recursive: true, force: true });
-        globalStore.updateRoot();
         console.log("✔ Compiled Code (unlinkDir)");
         (0, createDevServer_1.broadcast)(wss, { type: "nom-updated", event, file });
     }
