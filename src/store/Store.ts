@@ -19,49 +19,62 @@ class GlobalStore {
 
   private constructor() {}
 
-    private runTreeInWorker(root: Node | SuperNode) {
+  private runTreeInWorker(root: Node | SuperNode) {
     // Kill old worker if exists
     if (this.execWorker) {
       this.execWorker.terminate();
       this.execWorker = null;
     }
 
-    // Spawn a new worker thread
+    // Spawn new worker thread
     this.execWorker = new Worker(
       `
-      const { parentPort, workerData } = require('node:worker_threads');
-      const { execTreeNaive } = require('@paraflux/core');
+    const { parentPort, workerData } = require('node:worker_threads');
+    const { execTreeNaive } = require('@paraflux/core');
 
-      (async () => {
-        try {
-          await execTreeNaive(workerData.root);
-          parentPort.postMessage({ status: "done" });   
-        } catch (err) {
-          parentPort.postMessage({ status: "error", error: err.toString() });
-        }
-      })();
-      `,
+    (async () => {
+      try {
+        await execTreeNaive(workerData.root);
+      } catch (err) {
+        // Only send errors to main thread
+        parentPort.postMessage({ status: "error", error: err.toString() });
+      }
+    })();
+    `,
       {
         eval: true,
         workerData: { root },
+        stdout: true,
+        stderr: true,
       }
     );
 
+    // Pipe worker stdout -> main console
+    this.execWorker.stdout?.on("data", (chunk) => {
+      process.stdout.write(chunk.toString());
+    });
+
+    this.execWorker.stderr?.on("data", (chunk) => {
+      process.stderr.write(chunk.toString());
+    });
+
+    // Only log errors explicitly posted by worker
     this.execWorker.on("message", (msg) => {
-      console.log("Worker message:", msg);
+      if (msg.status === "error") {
+        console.error("Worker execution error:", msg.error);
+      }
     });
 
     this.execWorker.on("error", (err) => {
-      console.error("Worker error:", err);
+      console.error("Worker thread error:", err);
       this.execWorker = null;
     });
 
     this.execWorker.on("exit", (code) => {
-      console.log("Worker exited with code", code);
+      if (code !== 0) console.error("Worker exited with non-zero code", code);
       this.execWorker = null;
     });
   }
-
 
   public async loadAppRoot() {
     const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/main.js");
@@ -81,10 +94,12 @@ class GlobalStore {
       // console.log("AppRootPath: ",appRootPath);
 
       const mod: any = await import(outPath);
-      
-      await this.replaceNodeDFS(this.root, mod.default.constructor.name, mod.default);
 
-
+      await this.replaceNodeDFS(
+        this.root,
+        mod.default.constructor.name,
+        mod.default
+      );
 
       // Execute full tree code naively
       if (this.root) await this.runTreeInWorker(this.root);
@@ -94,38 +109,37 @@ class GlobalStore {
   }
 
   private async replaceNodeDFS(
-  root: Node | SuperNode,
-  targetName: string,
-  NewCtor: new () => Node | SuperNode
-) {
-  try {
-    if (root.constructor.name === targetName) {
-      if (!root.parent) {
-        const newNode = new NewCtor();
-        newNode.parent = null;
-        this.root = newNode; 
-      } else {
-        const parent = root.parent;
-        const newNode = new NewCtor();
-        newNode.parent = parent;
+    root: Node | SuperNode,
+    targetName: string,
+    NewCtor: new () => Node | SuperNode
+  ) {
+    try {
+      if (root.constructor.name === targetName) {
+        if (!root.parent) {
+          const newNode = new NewCtor();
+          newNode.parent = null;
+          this.root = newNode;
+        } else {
+          const parent = root.parent;
+          const newNode = new NewCtor();
+          newNode.parent = parent;
 
-        parent.children.set(targetName, newNode);
-        newNode.render();
+          parent.children.set(targetName, newNode);
+          newNode.render();
+        }
+        return;
       }
-      return;
-    }
 
-    // DFS into children
-    if (root.children && root.children.size > 0) {
-      for (const [, child] of root.children) {
-        this.replaceNodeDFS(child, targetName, NewCtor);
+      // DFS into children
+      if (root.children && root.children.size > 0) {
+        for (const [, child] of root.children) {
+          this.replaceNodeDFS(child, targetName, NewCtor);
+        }
       }
+    } catch (error) {
+      console.log("Error Updating ChildNode: ", error);
     }
-  } catch (error) {
-    console.log("Error Updating ChildNode: ", error);
   }
-}
-
 
   public static getInstance(): GlobalStore {
     if (!GlobalStore.instance) {

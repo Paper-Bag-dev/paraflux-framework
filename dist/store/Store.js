@@ -49,37 +49,50 @@ class GlobalStore {
             this.execWorker.terminate();
             this.execWorker = null;
         }
-        // Spawn a new worker thread
+        // Spawn new worker thread
         this.execWorker = new node_worker_threads_1.Worker(`
-      const { parentPort, workerData } = require('node:worker_threads');
-      const { execTreeNaive } = require('@paraflux/core');
+    const { parentPort, workerData } = require('node:worker_threads');
+    const { execTreeNaive } = require('@paraflux/core');
 
-      (async () => {
-        try {
-          await execTreeNaive(workerData.root);
-          parentPort.postMessage({ status: "done" });   
-        } catch (err) {
-          parentPort.postMessage({ status: "error", error: err.toString() });
-        }
-      })();
-      `, {
+    (async () => {
+      try {
+        await execTreeNaive(workerData.root);
+      } catch (err) {
+        // Only send errors to main thread
+        parentPort.postMessage({ status: "error", error: err.toString() });
+      }
+    })();
+    `, {
             eval: true,
             workerData: { root },
+            stdout: true,
+            stderr: true,
         });
+        // Pipe worker stdout -> main console
+        this.execWorker.stdout?.on("data", (chunk) => {
+            process.stdout.write(chunk.toString());
+        });
+        this.execWorker.stderr?.on("data", (chunk) => {
+            process.stderr.write(chunk.toString());
+        });
+        // Only log errors explicitly posted by worker
         this.execWorker.on("message", (msg) => {
-            console.log("Worker message:", msg);
+            if (msg.status === "error") {
+                console.error("Worker execution error:", msg.error);
+            }
         });
         this.execWorker.on("error", (err) => {
-            console.error("Worker error:", err);
+            console.error("Worker thread error:", err);
             this.execWorker = null;
         });
         this.execWorker.on("exit", (code) => {
-            console.log("Worker exited with code", code);
+            if (code !== 0)
+                console.error("Worker exited with non-zero code", code);
             this.execWorker = null;
         });
     }
     async loadAppRoot() {
-        const appRootPath = path_1.default.resolve(process.cwd(), ".paraflux/cache/App.js");
+        const appRootPath = path_1.default.resolve(process.cwd(), ".paraflux/cache/main.js");
         const mod = await Promise.resolve(`${appRootPath}`).then(s => __importStar(require(s)));
         this.App = mod.default ?? mod.App;
         this.root = (0, createRoot_1.createRoot)(this.App);
