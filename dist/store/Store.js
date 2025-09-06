@@ -32,7 +32,7 @@ const nodeStore_1 = require("./nodeStore");
 const viewsStore_1 = require("./viewsStore");
 const convertPathForCacheFn_1 = __importDefault(require("../utils/convertPathForCacheFn"));
 const LiveNom_1 = __importDefault(require("../NOM/LiveNom"));
-const node_worker_threads_1 = require("node:worker_threads");
+const node_child_process_1 = require("node:child_process");
 class GlobalStore {
     static instance = null;
     root = null;
@@ -41,54 +41,42 @@ class GlobalStore {
     viewStore = new viewsStore_1.ViewStore();
     nodesStore = new nodeStore_1.NodeStore();
     liveNom = new LiveNom_1.default();
-    execWorker = null;
+    execProcess = null;
     constructor() { }
-    runTreeInWorker(root) {
-        // Kill old worker if exists
-        if (this.execWorker) {
-            this.execWorker.terminate();
-            this.execWorker = null;
+    runTreeInProcess(root) {
+        // Kill previous process if exists
+        if (this.execProcess) {
+            this.execProcess.kill("SIGTERM");
+            this.execProcess = null;
         }
-        // Spawn new worker thread
-        this.execWorker = new node_worker_threads_1.Worker(`
-    const { parentPort, workerData } = require('node:worker_threads');
-    const { execTreeNaive } = require('@paraflux/core');
-
-    (async () => {
-      try {
-        await execTreeNaive(workerData.root);
-      } catch (err) {
-        // Only send errors to main thread
-        parentPort.postMessage({ status: "error", error: err.toString() });
-      }
-    })();
-    `, {
-            eval: true,
-            workerData: { root },
-            stdout: true,
-            stderr: true,
+        // Create a temporary file that runs the tree
+        const tempRunnerPath = require("path").resolve(process.cwd(), ".paraflux/cache/treeRunner.js");
+        // Write a small JS file dynamically
+        const fs = require("fs");
+        fs.writeFileSync(tempRunnerPath, `
+      import { execTreeNaive } from '@paraflux/core';
+      (async () => {
+        try {
+          const root = ${JSON.stringify(root, null, 2)};
+          await execTreeNaive(root);
+        } catch(e) {
+          console.error("Tree execution error:", e);
+          process.exit(1);
+        }
+      })();
+      `);
+        // Spawn a new Node process to run the tree
+        this.execProcess = (0, node_child_process_1.spawn)(process.execPath, [tempRunnerPath], {
+            stdio: "inherit", // pipes stdout/stderr to main terminal
         });
-        // Pipe worker stdout -> main console
-        this.execWorker.stdout?.on("data", (chunk) => {
-            process.stdout.write(chunk.toString());
-        });
-        this.execWorker.stderr?.on("data", (chunk) => {
-            process.stderr.write(chunk.toString());
-        });
-        // Only log errors explicitly posted by worker
-        this.execWorker.on("message", (msg) => {
-            if (msg.status === "error") {
-                console.error("Worker execution error:", msg.error);
-            }
-        });
-        this.execWorker.on("error", (err) => {
-            console.error("Worker thread error:", err);
-            this.execWorker = null;
-        });
-        this.execWorker.on("exit", (code) => {
+        this.execProcess.on("exit", (code) => {
             if (code !== 0)
-                console.error("Worker exited with non-zero code", code);
-            this.execWorker = null;
+                console.error("Tree process exited with code", code);
+            this.execProcess = null;
+        });
+        this.execProcess.on("error", (err) => {
+            console.error("Tree process error:", err);
+            this.execProcess = null;
         });
     }
     async loadAppRoot() {
@@ -110,7 +98,7 @@ class GlobalStore {
             await this.replaceNodeDFS(this.root, mod.default.constructor.name, mod.default);
             // Execute full tree code naively
             if (this.root)
-                await this.runTreeInWorker(this.root);
+                await this.runTreeInProcess(this.root);
         }
         catch (error) {
             console.log("Error Updating App: ", error);

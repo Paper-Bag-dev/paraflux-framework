@@ -5,7 +5,7 @@ import { NodeStore } from "./nodeStore";
 import { ViewStore } from "./viewsStore";
 import convertPathForCacheFn from "../utils/convertPathForCacheFn";
 import LiveNOM from "../NOM/LiveNom";
-import { Worker } from "node:worker_threads";
+import { spawn, ChildProcess } from "node:child_process";
 
 class GlobalStore {
   private static instance: GlobalStore | null = null;
@@ -15,66 +15,57 @@ class GlobalStore {
   public viewStore: ViewStore = new ViewStore();
   public nodesStore: NodeStore = new NodeStore();
   public liveNom: LiveNOM = new LiveNOM();
-  private execWorker: Worker | null = null;
+  private execProcess: ChildProcess | null = null;
 
   private constructor() {}
 
-  private runTreeInWorker(root: Node | SuperNode) {
-    // Kill old worker if exists
-    if (this.execWorker) {
-      this.execWorker.terminate();
-      this.execWorker = null;
+  private runTreeInProcess(root: Node | SuperNode) {
+    // Kill previous process if exists
+    if (this.execProcess) {
+      this.execProcess.kill("SIGTERM");
+      this.execProcess = null;
     }
 
-    // Spawn new worker thread
-    this.execWorker = new Worker(
-      `
-    const { parentPort, workerData } = require('node:worker_threads');
-    const { execTreeNaive } = require('@paraflux/core');
-
-    (async () => {
-      try {
-        await execTreeNaive(workerData.root);
-      } catch (err) {
-        // Only send errors to main thread
-        parentPort.postMessage({ status: "error", error: err.toString() });
-      }
-    })();
-    `,
-      {
-        eval: true,
-        workerData: { root },
-        stdout: true,
-        stderr: true,
-      }
+    // Create a temporary file that runs the tree
+    const tempRunnerPath = require("path").resolve(
+      process.cwd(),
+      ".paraflux/cache/treeRunner.js"
     );
 
-    // Pipe worker stdout -> main console
-    this.execWorker.stdout?.on("data", (chunk) => {
-      process.stdout.write(chunk.toString());
+    // Write a small JS file dynamically
+    const fs = require("fs");
+    fs.writeFileSync(
+      tempRunnerPath,
+      `
+      import { execTreeNaive } from '@paraflux/core';
+      (async () => {
+        try {
+          const root = ${JSON.stringify(root, null, 2)};
+          await execTreeNaive(root);
+        } catch(e) {
+          console.error("Tree execution error:", e);
+          process.exit(1);
+        }
+      })();
+      `
+    );
+
+    // Spawn a new Node process to run the tree
+    this.execProcess = spawn(process.execPath, [tempRunnerPath], {
+      stdio: "inherit", // pipes stdout/stderr to main terminal
     });
 
-    this.execWorker.stderr?.on("data", (chunk) => {
-      process.stderr.write(chunk.toString());
+    this.execProcess.on("exit", (code) => {
+      if (code !== 0) console.error("Tree process exited with code", code);
+      this.execProcess = null;
     });
 
-    // Only log errors explicitly posted by worker
-    this.execWorker.on("message", (msg) => {
-      if (msg.status === "error") {
-        console.error("Worker execution error:", msg.error);
-      }
-    });
-
-    this.execWorker.on("error", (err) => {
-      console.error("Worker thread error:", err);
-      this.execWorker = null;
-    });
-
-    this.execWorker.on("exit", (code) => {
-      if (code !== 0) console.error("Worker exited with non-zero code", code);
-      this.execWorker = null;
+    this.execProcess.on("error", (err) => {
+      console.error("Tree process error:", err);
+      this.execProcess = null;
     });
   }
+
 
   public async loadAppRoot() {
     const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/main.js");
@@ -102,7 +93,7 @@ class GlobalStore {
       );
 
       // Execute full tree code naively
-      if (this.root) await this.runTreeInWorker(this.root);
+      if (this.root) await this.runTreeInProcess(this.root);
     } catch (error) {
       console.log("Error Updating App: ", error);
     }
