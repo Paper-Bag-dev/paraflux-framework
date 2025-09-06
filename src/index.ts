@@ -5,6 +5,7 @@ import buildApp from "./builder/esbuild";
 
 async function main() {
   try {
+    await buildApp("src/main.ts");
     await buildApp("src/App.ts");
     const { wss } = createDevServer(5000);
     const globalStore = (await import("./store/Store")).default;

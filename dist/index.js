@@ -33,6 +33,7 @@ const createWatcher_1 = require("./watcher/createWatcher");
 const esbuild_1 = __importDefault(require("./builder/esbuild"));
 async function main() {
     try {
+        await (0, esbuild_1.default)("src/main.ts");
         await (0, esbuild_1.default)("src/App.ts");
         const { wss } = (0, createDevServer_1.createDevServer)(5000);
         const globalStore = (await Promise.resolve().then(() => __importStar(require("./store/Store")))).default;
