@@ -6,13 +6,16 @@ declare class GlobalStore {
     private static instance;
     root: SuperNode | Node | null;
     private App;
+    private ignoreFirstError;
     viewStore: ViewStore;
     nodesStore: NodeStore;
     liveNom: LiveNOM;
+    private execWorker;
     private constructor();
-    private clearModuleCache;
+    private runTreeInWorker;
     loadAppRoot(): Promise<void>;
     updateRoot(buildPath?: string): Promise<void>;
+    private replaceNodeDFS;
     static getInstance(): GlobalStore;
 }
 declare const globalStore: GlobalStore;

@@ -30,37 +30,53 @@ const path_1 = __importDefault(require("path"));
 const createRoot_1 = require("@paraflux/core/dist/functions/createRoot");
 const nodeStore_1 = require("./nodeStore");
 const viewsStore_1 = require("./viewsStore");
-const core_1 = require("@paraflux/core");
 const convertPathForCacheFn_1 = __importDefault(require("../utils/convertPathForCacheFn"));
 const LiveNom_1 = __importDefault(require("../NOM/LiveNom"));
+const node_worker_threads_1 = require("node:worker_threads");
 class GlobalStore {
     static instance = null;
     root = null;
     App;
+    ignoreFirstError = true;
     viewStore = new viewsStore_1.ViewStore();
     nodesStore = new nodeStore_1.NodeStore();
     liveNom = new LiveNom_1.default();
+    execWorker = null;
     constructor() { }
-    // Recursive cache clearing
-    clearModuleCache(modulePath) {
+    runTreeInWorker(root) {
+        // Kill old worker if exists
+        if (this.execWorker) {
+            this.execWorker.terminate();
+            this.execWorker = null;
+        }
+        // Spawn a new worker thread
+        this.execWorker = new node_worker_threads_1.Worker(`
+      const { parentPort, workerData } = require('node:worker_threads');
+      const { execTreeNaive } = require('@paraflux/core');
+
+      (async () => {
         try {
-            const resolvedPath = require.resolve(modulePath);
-            const mod = require.cache[resolvedPath];
-            if (!mod)
-                return;
-            if (resolvedPath.includes("node_modules"))
-                return;
-            delete require.cache[resolvedPath];
-            for (const m of Object.values(require.cache)) {
-                if (!m)
-                    continue;
-                if (m.children.some((c) => c.id === resolvedPath)) {
-                    this.clearModuleCache(m.id);
-                }
-            }
+          await execTreeNaive(workerData.root);
+          parentPort.postMessage({ status: "done" });   
+        } catch (err) {
+          parentPort.postMessage({ status: "error", error: err.toString() });
         }
-        catch (error) {
-        }
+      })();
+      `, {
+            eval: true,
+            workerData: { root },
+        });
+        this.execWorker.on("message", (msg) => {
+            console.log("Worker message:", msg);
+        });
+        this.execWorker.on("error", (err) => {
+            console.error("Worker error:", err);
+            this.execWorker = null;
+        });
+        this.execWorker.on("exit", (code) => {
+            console.log("Worker exited with code", code);
+            this.execWorker = null;
+        });
     }
     async loadAppRoot() {
         const appRootPath = path_1.default.resolve(process.cwd(), ".paraflux/cache/App.js");
@@ -74,17 +90,45 @@ class GlobalStore {
             if (this.root === null)
                 throw new Error("Root is Null");
             const outPath = (0, convertPathForCacheFn_1.default)(buildPath);
-            const appRootPath = path_1.default.resolve(process.cwd(), ".paraflux/cache/App.js");
-            this.clearModuleCache(outPath);
-            const mod = await Promise.resolve(`${appRootPath}`).then(s => __importStar(require(s)));
-            this.App = mod.default ?? mod.App;
-            this.root.render();
+            // const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/App.js");
+            // console.log("outPath: ",outPath);
+            // console.log("AppRootPath: ",appRootPath);
+            const mod = await Promise.resolve(`${outPath}`).then(s => __importStar(require(s)));
+            await this.replaceNodeDFS(this.root, mod.default.constructor.name, mod.default);
             // Execute full tree code naively
             if (this.root)
-                await (0, core_1.execTreeNaive)(this.root);
+                await this.runTreeInWorker(this.root);
         }
         catch (error) {
             console.log("Error Updating App: ", error);
+        }
+    }
+    async replaceNodeDFS(root, targetName, NewCtor) {
+        try {
+            if (root.constructor.name === targetName) {
+                if (!root.parent) {
+                    const newNode = new NewCtor();
+                    newNode.parent = null;
+                    this.root = newNode;
+                }
+                else {
+                    const parent = root.parent;
+                    const newNode = new NewCtor();
+                    newNode.parent = parent;
+                    parent.children.set(targetName, newNode);
+                    newNode.render();
+                }
+                return;
+            }
+            // DFS into children
+            if (root.children && root.children.size > 0) {
+                for (const [, child] of root.children) {
+                    this.replaceNodeDFS(child, targetName, NewCtor);
+                }
+            }
+        }
+        catch (error) {
+            console.log("Error Updating ChildNode: ", error);
         }
     }
     static getInstance() {
