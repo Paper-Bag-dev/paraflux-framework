@@ -37,38 +37,23 @@ class GlobalStore {
     static instance = null;
     root = null;
     App;
-    ignoreFirstError = true;
     viewStore = new viewsStore_1.ViewStore();
     nodesStore = new nodeStore_1.NodeStore();
     liveNom = new LiveNom_1.default();
     execProcess = null;
     constructor() { }
     runTreeInProcess(root) {
-        // Kill previous process if exists
         if (this.execProcess) {
             this.execProcess.kill("SIGTERM");
             this.execProcess = null;
         }
-        // Create a temporary file that runs the tree
-        const tempRunnerPath = require("path").resolve(process.cwd(), ".paraflux/cache/treeRunner.js");
-        // Write a small JS file dynamically
-        const fs = require("fs");
-        fs.writeFileSync(tempRunnerPath, `
-      import { execTreeNaive } from '@paraflux/core';
-      (async () => {
-        try {
-          const root = ${JSON.stringify(root, null, 2)};
-          await execTreeNaive(root);
-        } catch(e) {
-          console.error("Tree execution error:", e);
-          process.exit(1);
-        }
-      })();
-      `);
-        // Spawn a new Node process to run the tree
-        this.execProcess = (0, node_child_process_1.spawn)(process.execPath, [tempRunnerPath], {
-            stdio: "inherit", // pipes stdout/stderr to main terminal
+        const runnerFile = path_1.default.resolve(require.resolve("node_modules/@paraflux/framework/utils/executionEnv.js"));
+        // Fork child process (gives IPC channel)
+        this.execProcess = (0, node_child_process_1.fork)(runnerFile, {
+            stdio: ["inherit", "inherit", "inherit", "ipc"],
         });
+        // Send the in-memory root object
+        this.execProcess.send(root);
         this.execProcess.on("exit", (code) => {
             if (code !== 0)
                 console.error("Tree process exited with code", code);
@@ -78,6 +63,7 @@ class GlobalStore {
             console.error("Tree process error:", err);
             this.execProcess = null;
         });
+        console.log("✔ Running build in child process");
     }
     async loadAppRoot() {
         const appRootPath = path_1.default.resolve(process.cwd(), ".paraflux/cache/main.js");
@@ -86,19 +72,16 @@ class GlobalStore {
         this.root = (0, createRoot_1.createRoot)(this.App);
         this.root.render();
     }
-    async updateRoot(buildPath = ".paraflux/cache/App.js") {
+    async updateRoot(buildPath = ".paraflux/cache/main.js") {
         try {
             if (this.root === null)
                 throw new Error("Root is Null");
             const outPath = (0, convertPathForCacheFn_1.default)(buildPath);
-            // const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/App.js");
-            // console.log("outPath: ",outPath);
-            // console.log("AppRootPath: ",appRootPath);
             const mod = await Promise.resolve(`${outPath}`).then(s => __importStar(require(s)));
-            await this.replaceNodeDFS(this.root, mod.default.constructor.name, mod.default);
-            // Execute full tree code naively
+            console.log("loaded mod ", mod);
+            await this.replaceNodeDFS(this.root, mod.default.name, mod.default);
             if (this.root)
-                await this.runTreeInProcess(this.root);
+                this.runTreeInProcess(this.root);
         }
         catch (error) {
             console.log("Error Updating App: ", error);
@@ -117,7 +100,7 @@ class GlobalStore {
                     const newNode = new NewCtor();
                     newNode.parent = parent;
                     parent.children.set(targetName, newNode);
-                    newNode.render();
+                    parent.render();
                 }
                 return;
             }

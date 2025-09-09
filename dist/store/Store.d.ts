@@ -6,7 +6,6 @@ declare class GlobalStore {
     private static instance;
     root: SuperNode | Node | null;
     private App;
-    private ignoreFirstError;
     viewStore: ViewStore;
     nodesStore: NodeStore;
     liveNom: LiveNOM;

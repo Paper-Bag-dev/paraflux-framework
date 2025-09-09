@@ -5,13 +5,12 @@ import { NodeStore } from "./nodeStore";
 import { ViewStore } from "./viewsStore";
 import convertPathForCacheFn from "../utils/convertPathForCacheFn";
 import LiveNOM from "../NOM/LiveNom";
-import { spawn, ChildProcess } from "node:child_process";
-
+import { spawn, ChildProcess, fork } from "node:child_process";
+import fs from "node:fs";
 class GlobalStore {
   private static instance: GlobalStore | null = null;
   root: SuperNode | Node | null = null;
   private App: any;
-  private ignoreFirstError: boolean = true;
   public viewStore: ViewStore = new ViewStore();
   public nodesStore: NodeStore = new NodeStore();
   public liveNom: LiveNOM = new LiveNOM();
@@ -20,40 +19,22 @@ class GlobalStore {
   private constructor() {}
 
   private runTreeInProcess(root: Node | SuperNode) {
-    // Kill previous process if exists
     if (this.execProcess) {
       this.execProcess.kill("SIGTERM");
       this.execProcess = null;
     }
 
-    // Create a temporary file that runs the tree
-    const tempRunnerPath = require("path").resolve(
-      process.cwd(),
-      ".paraflux/cache/treeRunner.js"
+    const runnerFile = path.resolve(
+      require.resolve("node_modules/@paraflux/framework/utils/executionEnv.js")
     );
 
-    // Write a small JS file dynamically
-    const fs = require("fs");
-    fs.writeFileSync(
-      tempRunnerPath,
-      `
-      import { execTreeNaive } from '@paraflux/core';
-      (async () => {
-        try {
-          const root = ${JSON.stringify(root, null, 2)};
-          await execTreeNaive(root);
-        } catch(e) {
-          console.error("Tree execution error:", e);
-          process.exit(1);
-        }
-      })();
-      `
-    );
-
-    // Spawn a new Node process to run the tree
-    this.execProcess = spawn(process.execPath, [tempRunnerPath], {
-      stdio: "inherit", // pipes stdout/stderr to main terminal
+    // Fork child process (gives IPC channel)
+    this.execProcess = fork(runnerFile, {
+      stdio: ["inherit", "inherit", "inherit", "ipc"],
     });
+
+    // Send the in-memory root object
+    this.execProcess.send(root);
 
     this.execProcess.on("exit", (code) => {
       if (code !== 0) console.error("Tree process exited with code", code);
@@ -64,41 +45,34 @@ class GlobalStore {
       console.error("Tree process error:", err);
       this.execProcess = null;
     });
-  }
 
+    console.log("✔ Running build in child process");
+  }
 
   public async loadAppRoot() {
     const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/main.js");
+
     const mod: any = await import(appRootPath);
     this.App = mod.default ?? mod.App;
     this.root = createRoot(this.App);
     this.root.render();
   }
 
-  public async updateRoot(buildPath: string = ".paraflux/cache/App.js") {
+  public async updateRoot(buildPath: string = ".paraflux/cache/main.js") {
     try {
       if (this.root === null) throw new Error("Root is Null");
       const outPath = convertPathForCacheFn(buildPath);
-      // const appRootPath = path.resolve(process.cwd(), ".paraflux/cache/App.js");
-
-      // console.log("outPath: ",outPath);
-      // console.log("AppRootPath: ",appRootPath);
 
       const mod: any = await import(outPath);
+      console.log("loaded mod ", mod);
 
-      await this.replaceNodeDFS(
-        this.root,
-        mod.default.constructor.name,
-        mod.default
-      );
+      await this.replaceNodeDFS(this.root, mod.default.name, mod.default);
 
-      // Execute full tree code naively
-      if (this.root) await this.runTreeInProcess(this.root);
+      if (this.root) this.runTreeInProcess(this.root);
     } catch (error) {
       console.log("Error Updating App: ", error);
     }
   }
-
   private async replaceNodeDFS(
     root: Node | SuperNode,
     targetName: string,
@@ -114,9 +88,8 @@ class GlobalStore {
           const parent = root.parent;
           const newNode = new NewCtor();
           newNode.parent = parent;
-
           parent.children.set(targetName, newNode);
-          newNode.render();
+          parent.render();
         }
         return;
       }
