@@ -2,11 +2,13 @@
 import { createDevServer } from "./devServer/createDevServer";
 import { createWatcher } from "./watcher/createWatcher";
 import buildApp from "./builder/esbuild";
+import createExecEnv from "./utils/createExecEnv";
 
 async function main() {
   try {
     await buildApp("src/main.ts");
     await buildApp("src/App.ts");
+    await createExecEnv();
     const { wss } = createDevServer(5000);
     const globalStore = (await import("./store/Store")).default;
     await createWatcher(wss, globalStore);

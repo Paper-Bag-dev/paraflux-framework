@@ -6,7 +6,6 @@ import { ViewStore } from "./viewsStore";
 import convertPathForCacheFn from "../utils/convertPathForCacheFn";
 import LiveNOM from "../NOM/LiveNom";
 import { spawn, ChildProcess, fork } from "node:child_process";
-import fs from "node:fs";
 class GlobalStore {
   private static instance: GlobalStore | null = null;
   root: SuperNode | Node | null = null;
@@ -25,7 +24,8 @@ class GlobalStore {
     }
 
     const runnerFile = path.resolve(
-      require.resolve("node_modules/@paraflux/framework/utils/executionEnv.js")
+      process.cwd(),
+      ".paraflux/runner/runnerEnv.mjs"
     );
 
     // Fork child process (gives IPC channel)
@@ -64,7 +64,6 @@ class GlobalStore {
       const outPath = convertPathForCacheFn(buildPath);
 
       const mod: any = await import(outPath);
-      console.log("loaded mod ", mod);
 
       await this.replaceNodeDFS(this.root, mod.default.name, mod.default);
 

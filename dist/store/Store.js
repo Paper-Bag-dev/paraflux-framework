@@ -47,7 +47,7 @@ class GlobalStore {
             this.execProcess.kill("SIGTERM");
             this.execProcess = null;
         }
-        const runnerFile = path_1.default.resolve(require.resolve("node_modules/@paraflux/framework/utils/executionEnv.js"));
+        const runnerFile = path_1.default.resolve(process.cwd(), ".paraflux/runner/runnerEnv.mjs");
         // Fork child process (gives IPC channel)
         this.execProcess = (0, node_child_process_1.fork)(runnerFile, {
             stdio: ["inherit", "inherit", "inherit", "ipc"],
@@ -78,7 +78,6 @@ class GlobalStore {
                 throw new Error("Root is Null");
             const outPath = (0, convertPathForCacheFn_1.default)(buildPath);
             const mod = await Promise.resolve(`${outPath}`).then(s => __importStar(require(s)));
-            console.log("loaded mod ", mod);
             await this.replaceNodeDFS(this.root, mod.default.name, mod.default);
             if (this.root)
                 this.runTreeInProcess(this.root);

@@ -31,10 +31,12 @@ exports.globalStore = void 0;
 const createDevServer_1 = require("./devServer/createDevServer");
 const createWatcher_1 = require("./watcher/createWatcher");
 const esbuild_1 = __importDefault(require("./builder/esbuild"));
+const createExecEnv_1 = __importDefault(require("./utils/createExecEnv"));
 async function main() {
     try {
         await (0, esbuild_1.default)("src/main.ts");
         await (0, esbuild_1.default)("src/App.ts");
+        await (0, createExecEnv_1.default)();
         const { wss } = (0, createDevServer_1.createDevServer)(5000);
         const globalStore = (await Promise.resolve().then(() => __importStar(require("./store/Store")))).default;
         await (0, createWatcher_1.createWatcher)(wss, globalStore);
