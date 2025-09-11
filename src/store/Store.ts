@@ -5,7 +5,8 @@ import { NodeStore } from "./nodeStore";
 import { ViewStore } from "./viewsStore";
 import convertPathForCacheFn from "../utils/convertPathForCacheFn";
 import LiveNOM from "../NOM/LiveNom";
-import { spawn, ChildProcess, fork } from "node:child_process";
+import { Worker } from "node:worker_threads";
+import fs from "fs";
 class GlobalStore {
   private static instance: GlobalStore | null = null;
   root: SuperNode | Node | null = null;
@@ -13,40 +14,106 @@ class GlobalStore {
   public viewStore: ViewStore = new ViewStore();
   public nodesStore: NodeStore = new NodeStore();
   public liveNom: LiveNOM = new LiveNOM();
-  private execProcess: ChildProcess | null = null;
+  private execWorker: Worker | null = null;
 
   private constructor() {}
 
-  private runTreeInProcess(root: Node | SuperNode) {
-    if (this.execProcess) {
-      this.execProcess.kill("SIGTERM");
-      this.execProcess = null;
+  private ensureWorkerFile(): string {
+    const runnerDir = path.resolve(process.cwd(), ".paraflux/runner");
+    const runnerFile = path.join(runnerDir, "workerExec.js");
+
+    fs.mkdirSync(runnerDir, { recursive: true });
+
+    // write minimal worker file only if missing (keeps dev fast)
+    if (!fs.existsSync(runnerFile)) {
+      const workerSource = `// (auto-generated) workerExec
+const { parentPort, workerData } = require("node:worker_threads");
+const path = require("path");
+const origLog = console.log;
+console.log = (...args) => { try { parentPort.postMessage({ _workerLog: true, args }); } catch(e){} origLog(...args); };
+
+(async () => {
+  try {
+    const buildPath = workerData && workerData.buildPath;
+    if (!buildPath) throw new Error("No buildPath provided");
+    const mod = require(buildPath);
+    const App = mod.default ?? mod.App ?? mod;
+    const core = require("@paraflux/core");
+    const execTreeNaive = core.execTreeNaive ?? core.execTreeNaive;
+    const createRoot = core.createRoot ?? require("@paraflux/core/dist/functions/createRoot").createRoot;
+    if (typeof createRoot !== "function") throw new Error("createRoot not found");
+    const root = createRoot(App);
+    root.render();
+    await execTreeNaive(root);
+    parentPort.postMessage({ done: true });
+  } catch (err) {
+    parentPort.postMessage({ error: err && err.stack ? err.stack : String(err) });
+  }
+})();
+`;
+      fs.writeFileSync(runnerFile, workerSource, { encoding: "utf8" });
     }
 
-    const runnerFile = path.resolve(
-      process.cwd(),
-      ".paraflux/runner/runnerEnv.mjs"
-    );
+    return runnerFile;
+  }
 
-    // Fork child process (gives IPC channel)
-    this.execProcess = fork(runnerFile, {
-      stdio: ["inherit", "inherit", "inherit", "ipc"],
+  private runTreeInProcess(buildPathOrRoot: string | Node | SuperNode) {
+    if (this.execWorker) {
+      this.execWorker.terminate();
+      this.execWorker = null;
+    }
+
+    // ensure runner file exists and get its path
+    const runnerFile = this.ensureWorkerFile();
+
+    // Resolve buildPath into a filesystem path the worker can require
+    // If caller passed a string, use that; else fall back to default compiled path
+    let buildPath: string;
+    if (typeof buildPathOrRoot === "string") {
+      buildPath = buildPathOrRoot;
+    } else {
+      // fallback: you may want to throw here and force caller to pass build path
+      throw new Error(
+        "runTreeInProcess: please pass compiled build path (string), not root instance"
+      );
+    }
+
+    // If buildPath is a file:// URL, convert to file path
+    if (buildPath.startsWith("file://")) {
+      const { fileURLToPath } = require("node:url");
+      buildPath = fileURLToPath(buildPath);
+    } else if (!path.isAbsolute(buildPath)) {
+      // make absolute relative to cwd
+      buildPath = path.resolve(process.cwd(), buildPath);
+    }
+
+    // spawn worker and pass the buildPath via workerData
+    this.execWorker = new Worker(runnerFile, {
+      workerData: { buildPath },
     });
 
-    // Send the in-memory root object
-    this.execProcess.send(root);
+    // this.execWorker.on("message", (msg) => {
+    //   if (msg && msg._workerLog) {
+    //     console.log("[Worker]", ...msg.args);
+    //   } else if (msg && msg.done) {
+    //     console.log("[Worker] done");
+    //   } else if (msg && msg.error) {
+    //     console.error("[Worker error]", msg.error);
+    //   } else {
+    //     console.log("[Worker message]", msg);
+    //   }
+    // });
 
-    this.execProcess.on("exit", (code) => {
-      if (code !== 0) console.error("Tree process exited with code", code);
-      this.execProcess = null;
+    this.execWorker.on("error", (err) => {
+      console.error("Worker error:", err);
     });
 
-    this.execProcess.on("error", (err) => {
-      console.error("Tree process error:", err);
-      this.execProcess = null;
+    this.execWorker.on("exit", (code) => {
+      if (code !== 0) console.error("Worker exited with code", code);
+      this.execWorker = null;
     });
 
-    console.log("✔ Running build in child process");
+    console.log("✔ Running build in worker");
   }
 
   public async loadAppRoot() {
@@ -61,17 +128,28 @@ class GlobalStore {
   public async updateRoot(buildPath: string = ".paraflux/cache/main.js") {
     try {
       if (this.root === null) throw new Error("Root is Null");
-      const outPath = convertPathForCacheFn(buildPath);
 
+      const outPath = convertPathForCacheFn(buildPath); 
+      const rootPath = convertPathForCacheFn( ".paraflux/cache/App.js");
       const mod: any = await import(outPath);
-
       await this.replaceNodeDFS(this.root, mod.default.name, mod.default);
 
-      if (this.root) this.runTreeInProcess(this.root);
+      // Now run in worker by giving worker the path to the compiled file
+      // Convert to a filesystem path the worker can require:
+      let requirePath = outPath;
+      if (requirePath.startsWith("file://")) {
+        const { fileURLToPath } = require("node:url");
+        requirePath = fileURLToPath(requirePath);
+      } else {
+        requirePath = path.resolve(process.cwd(), requirePath);
+      }
+
+      this.runTreeInProcess(requirePath);
     } catch (error) {
       console.log("Error Updating App: ", error);
     }
   }
+
   private async replaceNodeDFS(
     root: Node | SuperNode,
     targetName: string,

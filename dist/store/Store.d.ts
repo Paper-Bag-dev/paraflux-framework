@@ -9,8 +9,9 @@ declare class GlobalStore {
     viewStore: ViewStore;
     nodesStore: NodeStore;
     liveNom: LiveNOM;
-    private execProcess;
+    private execWorker;
     private constructor();
+    private ensureWorkerFile;
     private runTreeInProcess;
     loadAppRoot(): Promise<void>;
     updateRoot(buildPath?: string): Promise<void>;
